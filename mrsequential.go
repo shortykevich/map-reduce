@@ -8,7 +8,7 @@ import (
 	"plugin"
 	"sort"
 
-	"github.com/shortykevich/map-reduce-lab/mr"
+	"github.com/shortykevich/map-reduce/mr"
 )
 
 // for sorting by key.
