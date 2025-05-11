@@ -5,6 +5,8 @@ import (
 	"hash/fnv"
 	"log"
 	"net/rpc"
+	"os"
+	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -21,16 +23,57 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-// main/mrworker.go calls this function.
+// mrworker/mrworker.go calls this function.
 func Worker(
 	mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
-	// Your worker implementation here.
+	for {
+		getTaskArg := GetTaskArg{}
+		getTaskReply := new(GetTaskReply)
+		ok := call("Coordinator.GetTask", getTaskArg, &getTaskReply)
+		if !ok {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
 
-	// uncomment to send the Example RPC to the coordinator.
-	CallExample()
+		switch getTaskReply.TaskType {
+		case "map":
+			contents, err := os.ReadFile(getTaskReply.FileName)
+			if err != nil {
+				log.Fatalf("Opening file: %v", err)
+			}
 
+			kva := mapf(getTaskReply.FileName, string(contents))
+
+			buckets := make([][]KeyValue, getTaskReply.BucketsAmount)
+			for _, kv := range kva {
+				i := ihash(kv.Key) % getTaskReply.BucketsAmount
+				buckets[i] = append(buckets[i], kv)
+			}
+
+			for i, bucket := range buckets {
+				intmdFileName := fmt.Sprintf("mr-%d-%d", getTaskReply.BucketsAmount, i)
+				err := MarshalKeyValues(intmdFileName, bucket)
+				if err != nil {
+					log.Fatalf("Marshaling: %v", err)
+				}
+			}
+
+			doneArg := DoneTaskArg{TaskNum: getTaskReply.TaskNum, TaskType: "map"}
+			doneResp := new(DoneTaskReply)
+			ok := call("Coordnator.TaskDone", doneArg, doneResp)
+			if !ok {
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
+		case "reduce":
+			// TODO: reduce
+		}
+	}
+
+	// CallExample()
 }
 
 // example function to show how to make an RPC call to the coordinator.

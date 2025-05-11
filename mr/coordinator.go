@@ -8,9 +8,37 @@ import (
 	"os"
 )
 
+const (
+	JobIdle = iota
+	JobInProcess
+	JobCompleted
+)
+
 type Coordinator struct {
 	// Your definitions here.
+
+	tasks []Task
 }
+
+type Task struct {
+	TaskNum  int
+	TaskType string
+}
+
+type GetTaskArg struct{}
+
+type GetTaskReply struct {
+	Task
+	FileName      string
+	Status        int
+	BucketsAmount int
+}
+
+type DoneTaskArg struct {
+	TaskNum  int
+	TaskType string
+}
+type DoneTaskReply struct{}
 
 // Your code here -- RPC handlers for the worker to call.
 
@@ -36,23 +64,23 @@ func (c *Coordinator) server() {
 	go http.Serve(l, nil)
 }
 
-// main/mrcoordinator.go calls Done() periodically to find out
+// mrcoordinator/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
 	ret := false
 
-	// Your code here.
+	// TODO
 
 	return ret
 }
 
 // create a Coordinator.
-// main/mrcoordinator.go calls this function.
+// mrcoordinator/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 
-	// Your code here.
+	// TODO
 
 	c.server()
 	return &c

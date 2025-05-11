@@ -8,7 +8,7 @@ build/plugin:
 	@go build -o mrworker/wc.so -buildmode=plugin ./mrapps/wc.go
 
 run/seq: | clean-out
-	@go run mrsequential.go wc.so pg*.txt
+	@go run mrsequential.go ./mrworker/wc.so pg*.txt
 
 run/mrcoordinator:
 	@go run ./mrcoordinator/mrcoordinator.go ../pg-*.txt
