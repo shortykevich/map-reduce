@@ -20,26 +20,6 @@ type Coordinator struct {
 	tasks []Task
 }
 
-type Task struct {
-	TaskNum  int
-	TaskType string
-}
-
-type GetTaskArg struct{}
-
-type GetTaskReply struct {
-	Task
-	FileName      string
-	Status        int
-	BucketsAmount int
-}
-
-type DoneTaskArg struct {
-	TaskNum  int
-	TaskType string
-}
-type DoneTaskReply struct{}
-
 // Your code here -- RPC handlers for the worker to call.
 
 // an example RPC handler.

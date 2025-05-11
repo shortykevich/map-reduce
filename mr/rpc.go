@@ -24,6 +24,26 @@ type ExampleReply struct {
 	Y int
 }
 
+type Task struct {
+	TaskNum  int
+	TaskType string
+}
+
+type GetTaskArg struct{}
+
+type GetTaskReply struct {
+	Task
+	FileName      string
+	Status        int
+	BucketsAmount int
+}
+
+type DoneTaskArg struct {
+	TaskNum  int
+	TaskType string
+}
+type DoneTaskReply struct{}
+
 // Add your RPC definitions here.
 
 // Cook up a unique-ish UNIX-domain socket name
