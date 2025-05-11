@@ -47,14 +47,14 @@ func Worker(
 
 			kva := mapf(reply.FileName, string(contents))
 
-			buckets := make([][]KeyValue, reply.BucketsAmount)
+			buckets := make([][]KeyValue, reply.PartitionsAmount)
 			for _, kv := range kva {
-				i := ihash(kv.Key) % reply.BucketsAmount
+				i := ihash(kv.Key) % reply.PartitionsAmount
 				buckets[i] = append(buckets[i], kv)
 			}
 
 			for i, bucket := range buckets {
-				intmdFileName := fmt.Sprintf("mr-%d-%d", reply.BucketsAmount, i)
+				intmdFileName := fmt.Sprintf("mr-%d-%d", reply.PartitionsAmount, i)
 				if err := MarshalKeyValues(intmdFileName, bucket); err != nil {
 					log.Fatalf("Marshaling: %v", err)
 				}
@@ -104,15 +104,14 @@ func Worker(
 
 				i = j
 			}
+
 			doneArgs := DoneTaskArg{TaskType: "reduce", TaskNum: reply.Partition}
 			doneReply := new(DoneTaskReply)
-
 			ok := call("Coordinator.TaskDone", doneArgs, doneReply)
 			if !ok {
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
-
 		}
 	}
 

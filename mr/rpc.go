@@ -33,11 +33,11 @@ type GetTaskArg struct{}
 
 type GetTaskReply struct {
 	Task
-	FileName      string
-	Status        int
-	BucketsAmount int
-	MapTaskNum    int
-	Partition     int
+	FileName         string
+	Status           int
+	PartitionsAmount int
+	MapTaskNum       int
+	Partition        int
 }
 
 type DoneTaskArg struct {

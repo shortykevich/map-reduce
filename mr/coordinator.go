@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"sync"
 )
 
 const (
@@ -16,8 +17,7 @@ const (
 
 type Coordinator struct {
 	// Your definitions here.
-
-	tasks []Task
+	mu sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
