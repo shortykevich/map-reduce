@@ -54,8 +54,7 @@ func Worker(
 
 			for i, bucket := range buckets {
 				intmdFileName := fmt.Sprintf("mr-%d-%d", getTaskReply.BucketsAmount, i)
-				_, err := MarshalKeyValues(intmdFileName, bucket)
-				if err != nil {
+				if err := MarshalKeyValues(intmdFileName, bucket); err != nil {
 					log.Fatalf("Marshaling: %v", err)
 				}
 			}

@@ -21,15 +21,15 @@ func TestHelpers(t *testing.T) {
 		{Key: "string7", Value: "1"},
 	}
 
-	_, err := mr.MarshalKeyValues(testFileName, testData)
-	if err != nil {
-		t.Fatalf("Encoding: %v", err)
-	}
-	defer t.Cleanup(func() {
+	t.Cleanup(func() {
 		if err := os.Remove(testFileName); err != nil {
 			t.Fatalf("Deleteing: %v", err)
 		}
 	})
+
+	if err := mr.MarshalKeyValues(testFileName, testData); err != nil {
+		t.Fatalf("Encoding: %v", err)
+	}
 
 	decodedData, err := mr.UnmarshalKeyValues(0, 1)
 	if err != nil {
