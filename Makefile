@@ -1,13 +1,17 @@
-.PHONY: clean-out run/seq run/mrcoordinator run/mrworker
+.PHONY: clean-out build/plugin run/seq run/mrcoordinator run/mrworker
 
 clean-out:
 	@rm -f mr-out*
 
+build/plugin:
+	@rm -f ./mrworker/wc.so
+	@go build -o mrworker/wc.so -buildmode=plugin ./mrapps/wc.go
+
 run/seq: | clean-out
 	@go run mrsequential.go wc.so pg*.txt
 
-run/mrcoordinator: | clean-out
+run/mrcoordinator:
 	@go run ./mrcoordinator/mrcoordinator.go ../pg-*.txt
 
-run/mrworker: | clean-out
-	@go run ./mrworker/mrworker.go ../pg-*.txt
+run/mrworker:
+	@go run ./mrworker/mrworker.go ./mrworker/wc.so

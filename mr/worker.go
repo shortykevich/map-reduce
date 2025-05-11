@@ -22,13 +22,14 @@ func ihash(key string) int {
 }
 
 // main/mrworker.go calls this function.
-func Worker(mapf func(string, string) []KeyValue,
+func Worker(
+	mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
 	// Your worker implementation here.
 
 	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+	CallExample()
 
 }
 

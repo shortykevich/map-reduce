@@ -10,7 +10,6 @@ import (
 
 type Coordinator struct {
 	// Your definitions here.
-
 }
 
 // Your code here -- RPC handlers for the worker to call.
