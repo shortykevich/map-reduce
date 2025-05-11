@@ -40,11 +40,11 @@ func MarshalKeyValues(fname string, kva []KeyValue) error {
 	return nil
 }
 
-func UnmarshalKeyValues(taskNum int, bucketsAmount int) ([][]KeyValue, error) {
-	buckets := make([][]KeyValue, bucketsAmount)
+func UnmarshalKeyValues(partition int, mapTasksAmount int) ([]KeyValue, error) {
+	buckets := []KeyValue{}
 
-	for i := range buckets {
-		fileName := fmt.Sprintf("mr-%d-%d", taskNum, i)
+	for i := range mapTasksAmount {
+		fileName := fmt.Sprintf("mr-%d-%d", i, partition)
 		f, err := os.Open(fileName)
 		if err != nil {
 			return nil, fmt.Errorf("Opening file: %w", err)
@@ -56,7 +56,7 @@ func UnmarshalKeyValues(taskNum int, bucketsAmount int) ([][]KeyValue, error) {
 			return nil, fmt.Errorf("Decoding: %w", err)
 		}
 
-		buckets[i] = kvl
+		buckets = append(buckets, kvl...)
 	}
 
 	return buckets, nil

@@ -36,7 +36,7 @@ func TestHelpers(t *testing.T) {
 		t.Fatalf("Decoding: %v", err)
 	}
 
-	if !slices.Equal(testData, decodedData[0]) {
-		t.Errorf("got: %v, wanted: %v", decodedData[0], testData)
+	if !slices.Equal(testData, decodedData) {
+		t.Errorf("got: %v, wanted: %v", decodedData, testData)
 	}
 }

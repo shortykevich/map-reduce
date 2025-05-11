@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -29,46 +30,89 @@ func Worker(
 	reducef func(string, []string) string) {
 
 	for {
-		getTaskArg := GetTaskArg{}
-		getTaskReply := new(GetTaskReply)
-		ok := call("Coordinator.GetTask", getTaskArg, &getTaskReply)
+		arg := GetTaskArg{}
+		reply := new(GetTaskReply)
+		ok := call("Coordinator.GetTask", arg, &reply)
 		if !ok {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 
-		switch getTaskReply.TaskType {
+		switch reply.TaskType {
 		case "map":
-			contents, err := os.ReadFile(getTaskReply.FileName)
+			contents, err := os.ReadFile(reply.FileName)
 			if err != nil {
 				log.Fatalf("Opening file: %v", err)
 			}
 
-			kva := mapf(getTaskReply.FileName, string(contents))
+			kva := mapf(reply.FileName, string(contents))
 
-			buckets := make([][]KeyValue, getTaskReply.BucketsAmount)
+			buckets := make([][]KeyValue, reply.BucketsAmount)
 			for _, kv := range kva {
-				i := ihash(kv.Key) % getTaskReply.BucketsAmount
+				i := ihash(kv.Key) % reply.BucketsAmount
 				buckets[i] = append(buckets[i], kv)
 			}
 
 			for i, bucket := range buckets {
-				intmdFileName := fmt.Sprintf("mr-%d-%d", getTaskReply.BucketsAmount, i)
+				intmdFileName := fmt.Sprintf("mr-%d-%d", reply.BucketsAmount, i)
 				if err := MarshalKeyValues(intmdFileName, bucket); err != nil {
 					log.Fatalf("Marshaling: %v", err)
 				}
 			}
 
-			doneArg := DoneTaskArg{TaskNum: getTaskReply.TaskNum, TaskType: "map"}
-			doneResp := new(DoneTaskReply)
-			ok := call("Coordnator.TaskDone", doneArg, doneResp)
+			doneArg := DoneTaskArg{TaskNum: reply.TaskNum, TaskType: "map"}
+			doneReply := new(DoneTaskReply)
+			ok := call("Coordnator.TaskDone", doneArg, doneReply)
 			if !ok {
 				time.Sleep(500 * time.Millisecond)
 				continue
 			}
 
 		case "reduce":
-			// TODO: reduce
+			buckets, err := UnmarshalKeyValues(reply.MapTaskNum, reply.Partition)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			sort.Slice(buckets, func(i, j int) bool {
+				return buckets[i].Key < buckets[j].Key
+			})
+
+			outFileName := fmt.Sprintf("mr-out-%d", reply.Partition)
+			ofile, err := os.Create(outFileName)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			defer func() {
+				log.Fatal(ofile.Close())
+			}()
+
+			i := 0
+			for i < len(buckets) {
+				j := i + 1
+				for j < len(buckets) && buckets[j].Key == buckets[i].Key {
+					j++
+				}
+				values := []string{}
+				for k := i; k < j; k++ {
+					values = append(values, buckets[k].Value)
+				}
+				output := reducef(buckets[i].Key, values)
+
+				fmt.Fprintf(ofile, "%v %v\n", buckets[i].Key, output)
+
+				i = j
+			}
+			doneArgs := DoneTaskArg{TaskType: "reduce", TaskNum: reply.Partition}
+			doneReply := new(DoneTaskReply)
+
+			ok := call("Coordinator.TaskDone", doneArgs, doneReply)
+			if !ok {
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
 		}
 	}
 

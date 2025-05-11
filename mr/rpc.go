@@ -36,6 +36,8 @@ type GetTaskReply struct {
 	FileName      string
 	Status        int
 	BucketsAmount int
+	MapTaskNum    int
+	Partition     int
 }
 
 type DoneTaskArg struct {
