@@ -9,18 +9,25 @@ import (
 	"sync"
 )
 
-const (
-	JobIdle = iota
-	JobInProcess
-	JobCompleted
-)
+type TaskRecord struct {
+	Task   *Task
+	Status TaskStatus
+}
 
 type Coordinator struct {
 	// Your definitions here.
-	mu sync.Mutex
+	mu    sync.RWMutex
+	done  bool
+	tasks map[int]TaskRecord
 }
 
-// Your code here -- RPC handlers for the worker to call.
+func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
+	return nil
+}
+
+func (c *Coordinator) TaskDone(args *GetTaskArg, reply *GetTaskReply) error {
+	return nil
+}
 
 // an example RPC handler.
 //
@@ -58,10 +65,30 @@ func (c *Coordinator) Done() bool {
 // mrcoordinator/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
+	c := new(Coordinator)
 
 	// TODO
+	tasks := make(map[int]TaskRecord, len(files))
+	for i, filename := range files {
+		tasks[i] = TaskRecord{
+			Task: &Task{
+				MapTask: &MapTask{
+					FileName:         filename,
+					PartitionsAmount: nReduce,
+				},
+				ReduceTask: nil,
+				TaskID:     i,
+				TaskType:   TaskTypeMap,
+			},
+			Status: StatusIdle,
+		}
+	}
+	c.tasks = tasks
 
 	c.server()
-	return &c
+	return c
 }
+
+// func initMapTasks() map[int]GetTaskReply {
+
+// }

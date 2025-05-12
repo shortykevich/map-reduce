@@ -39,28 +39,28 @@ func Worker(
 		}
 
 		switch reply.TaskType {
-		case "map":
-			contents, err := os.ReadFile(reply.FileName)
+		case TaskTypeMap:
+			contents, err := os.ReadFile(reply.MapTask.FileName)
 			if err != nil {
 				log.Fatalf("Opening file: %v", err)
 			}
 
-			kva := mapf(reply.FileName, string(contents))
+			kva := mapf(reply.MapTask.FileName, string(contents))
 
-			buckets := make([][]KeyValue, reply.PartitionsAmount)
+			buckets := make([][]KeyValue, reply.MapTask.PartitionsAmount)
 			for _, kv := range kva {
-				i := ihash(kv.Key) % reply.PartitionsAmount
+				i := ihash(kv.Key) % reply.MapTask.PartitionsAmount
 				buckets[i] = append(buckets[i], kv)
 			}
 
 			for i, bucket := range buckets {
-				intmdFileName := fmt.Sprintf("mr-%d-%d", reply.PartitionsAmount, i)
+				intmdFileName := fmt.Sprintf("mr-%d-%d", reply.MapTask.PartitionsAmount, i)
 				if err := MarshalKeyValues(intmdFileName, bucket); err != nil {
 					log.Fatalf("Marshaling: %v", err)
 				}
 			}
 
-			doneArg := DoneTaskArg{TaskNum: reply.TaskNum, TaskType: "map"}
+			doneArg := DoneTaskArg{TaskID: reply.TaskID, TaskType: TaskTypeMap}
 			doneReply := new(DoneTaskReply)
 			ok := call("Coordnator.TaskDone", doneArg, doneReply)
 			if !ok {
@@ -68,8 +68,8 @@ func Worker(
 				continue
 			}
 
-		case "reduce":
-			buckets, err := UnmarshalKeyValues(reply.MapTaskNum, reply.Partition)
+		case TaskTypeReduce:
+			buckets, err := UnmarshalKeyValues(reply.ReduceTask.MapTaskNum, reply.ReduceTask.Partition)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -78,7 +78,7 @@ func Worker(
 				return buckets[i].Key < buckets[j].Key
 			})
 
-			outFileName := fmt.Sprintf("mr-out-%d", reply.Partition)
+			outFileName := fmt.Sprintf("mr-out-%d", reply.ReduceTask.Partition)
 			ofile, err := os.Create(outFileName)
 			if err != nil {
 				log.Fatal(err)
@@ -105,7 +105,10 @@ func Worker(
 				i = j
 			}
 
-			doneArgs := DoneTaskArg{TaskType: "reduce", TaskNum: reply.Partition}
+			doneArgs := DoneTaskArg{
+				TaskType: TaskTypeReduce,
+				TaskID:   reply.ReduceTask.Partition,
+			}
 			doneReply := new(DoneTaskReply)
 			ok := call("Coordinator.TaskDone", doneArgs, doneReply)
 			if !ok {

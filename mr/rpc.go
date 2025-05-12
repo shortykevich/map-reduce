@@ -11,6 +11,23 @@ import (
 	"strconv"
 )
 
+type TaskStatus int
+
+type TaskType int
+
+const (
+	StatusUnknown TaskStatus = iota
+	StatusIdle
+	StatusInProcess
+	StatusCompleted
+)
+
+const (
+	TaskTypeUnknown TaskType = iota
+	TaskTypeMap
+	TaskTypeReduce
+)
+
 //
 // example to show how to declare the arguments
 // and reply for an RPC.
@@ -25,28 +42,33 @@ type ExampleReply struct {
 }
 
 type Task struct {
-	TaskNum  int
-	TaskType string
+	MapTask    *MapTask
+	ReduceTask *ReduceTask
+	TaskID     int
+	TaskType   TaskType
+}
+
+type MapTask struct {
+	FileName         string
+	PartitionsAmount int
+}
+
+type ReduceTask struct {
+	MapTaskNum int
+	Partition  int
 }
 
 type GetTaskArg struct{}
 
 type GetTaskReply struct {
 	Task
-	FileName         string
-	Status           int
-	PartitionsAmount int
-	MapTaskNum       int
-	Partition        int
 }
 
 type DoneTaskArg struct {
-	TaskNum  int
-	TaskType string
+	TaskID   int
+	TaskType TaskType
 }
 type DoneTaskReply struct{}
-
-// Add your RPC definitions here.
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.

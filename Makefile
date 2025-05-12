@@ -18,10 +18,10 @@ build/mrworker:
 build/mr: build/plugin build/mrcoordinator build/mrworker
 
 run/seq: | clean-out
-	@go run mrsequential.go wc.so pg*.txt
+	@go run ./mrsequential.go wc.so pg*.txt
 
 run/mrcoordinator:
-	@go run coord pg-*.txt
+	@./coord pg-*.txt
 
 run/mrworker:
-	@go run worker wc.so
+	@./worker wc.so
