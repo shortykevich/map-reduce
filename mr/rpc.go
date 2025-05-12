@@ -54,8 +54,7 @@ type MapTask struct {
 }
 
 type ReduceTask struct {
-	MapTaskNum int
-	Partition  int
+	MapsAmount int
 }
 
 type GetTaskArg struct{}

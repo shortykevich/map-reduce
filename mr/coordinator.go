@@ -16,9 +16,34 @@ type TaskRecord struct {
 
 type Coordinator struct {
 	// Your definitions here.
-	mu    sync.RWMutex
-	done  bool
-	tasks map[int]TaskRecord
+	mu          sync.RWMutex
+	JobDone     bool
+	MapTasks    map[int]TaskRecord
+	ReduceTasks map[int]TaskRecord
+}
+
+func (c *Coordinator) mapTasksDone() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for _, mt := range c.MapTasks {
+		if mt.Status != StatusCompleted {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Coordinator) reduceTasksDone() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for _, mt := range c.ReduceTasks {
+		if mt.Status != StatusCompleted {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
@@ -68,9 +93,9 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := new(Coordinator)
 
 	// TODO
-	tasks := make(map[int]TaskRecord, len(files))
+	mapTasks := make(map[int]TaskRecord, len(files))
 	for i, filename := range files {
-		tasks[i] = TaskRecord{
+		mapTasks[i] = TaskRecord{
 			Task: &Task{
 				MapTask: &MapTask{
 					FileName:         filename,
@@ -83,7 +108,23 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 			Status: StatusIdle,
 		}
 	}
-	c.tasks = tasks
+	c.MapTasks = mapTasks
+
+	reduceTasks := make(map[int]TaskRecord, nReduce)
+	for i := range nReduce {
+		mapTasks[i] = TaskRecord{
+			Task: &Task{
+				ReduceTask: &ReduceTask{
+					MapsAmount: len(files),
+				},
+				MapTask:  nil,
+				TaskID:   i,
+				TaskType: TaskTypeReduce,
+			},
+			Status: StatusIdle,
+		}
+	}
+	c.ReduceTasks = reduceTasks
 
 	c.server()
 	return c

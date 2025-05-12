@@ -69,7 +69,7 @@ func Worker(
 			}
 
 		case TaskTypeReduce:
-			buckets, err := UnmarshalKeyValues(reply.ReduceTask.MapTaskNum, reply.ReduceTask.Partition)
+			buckets, err := UnmarshalKeyValues(reply.TaskID, reply.ReduceTask.MapsAmount)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -78,7 +78,7 @@ func Worker(
 				return buckets[i].Key < buckets[j].Key
 			})
 
-			outFileName := fmt.Sprintf("mr-out-%d", reply.ReduceTask.Partition)
+			outFileName := fmt.Sprintf("mr-out-%d", reply.ReduceTask.MapsAmount)
 			ofile, err := os.Create(outFileName)
 			if err != nil {
 				log.Fatal(err)
@@ -107,7 +107,7 @@ func Worker(
 
 			doneArgs := DoneTaskArg{
 				TaskType: TaskTypeReduce,
-				TaskID:   reply.ReduceTask.Partition,
+				TaskID:   reply.TaskID,
 			}
 			doneReply := new(DoneTaskReply)
 			ok := call("Coordinator.TaskDone", doneArgs, doneReply)

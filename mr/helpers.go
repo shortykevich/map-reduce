@@ -7,7 +7,7 @@ import (
 )
 
 func MarshalKeyValues(fname string, kva []KeyValue) error {
-	file, err := os.CreateTemp("./", fname+"-")
+	file, err := os.CreateTemp(".", fname+"-")
 	if err != nil {
 		return fmt.Errorf("Creating file: %w", err)
 	}
