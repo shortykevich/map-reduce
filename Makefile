@@ -1,10 +1,13 @@
-.PHONY: clean/out clean/plugins build/plugin run/seq run/mrcoordinator run/mrworker build/mrcoordinator build/mrworker build/mr
+.PHONY: create/mr-tmp clean/out clean/plugins build/plugin run/seq run/mrcoordinator run/mrworker build/mrcoordinator build/mrworker build/mr
 
 PDIR := "./mrapps"
 PLUGINS := crash.go early_exit.go indexer.go jobcount.go mtiming.go nocrash.go rtiming.go wc.go
 
+create/mr-tmp:
+	@mkdir -p ./main/mr-tmp
+
 clean/out:
-	@rm -f mr-out*
+	@rm -f ./main/mr-tmp/*
 
 clean/plugins:
 	@rm -f ./mrapps/*.so
@@ -15,23 +18,26 @@ build/plugins: | clean/plugins
 	done
 
 build/seq: | clean/out
-	@go build mrsequential.go
+	@go build -race -o ./main/ ./main/mrsequential.go
 
 build/mrcoordinator:
-	@rm -f coord
-	@go build -race -o coord ./mrcoordinator/mrcoordinator.go
+	@rm -f mrcoordinator
+	@go build -race -o ./main/ ./main/mrcoordinator.go
 
 build/mrworker:
-	@rm -f worker
-	@go build -race -o worker ./mrworker/mrworker.go
+	@rm -f mrworker
+	@go build -race -o ./main/ ./main/mrworker.go
 
-build/mr: build/plugins build/mrcoordinator build/mrworker
+build/mr: create/mr-tmp build/plugins build/mrcoordinator build/mrworker
 
 run/seq: | clean/out
-	@./mrsequential wc.so pg*.txt
+	@cd main/mr-tmp && ../mrsequential ../../mrapps/wc.so ../fixtures/pg*.txt
 
 run/mrcoordinator:
-	@./coord pg-*.txt
+	@cd main/mr-tmp && ../mrcoordinator ../fixtures/pg*.txt
 
 run/mrworker:
-	@./worker
+	@cd main/mr-tmp && ../mrworker ../../mrapps/wc.so
+
+run/tests: | clean/out
+	@cd main/ && ./test-mr.sh
