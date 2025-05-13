@@ -26,6 +26,7 @@ const (
 	TaskTypeUnknown TaskType = iota
 	TaskTypeMap
 	TaskTypeReduce
+	TaskTypeExit
 )
 
 //

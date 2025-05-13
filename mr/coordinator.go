@@ -1,12 +1,14 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
 	"sync"
+	"time"
 )
 
 type TaskRecord struct {
@@ -16,41 +18,100 @@ type TaskRecord struct {
 
 type Coordinator struct {
 	// Your definitions here.
-	mu          sync.RWMutex
+	mu          sync.Mutex
 	JobDone     bool
-	MapTasks    map[int]TaskRecord
-	ReduceTasks map[int]TaskRecord
+	MapTasks    []*TaskRecord
+	ReduceTasks []*TaskRecord
+	mapDone     bool
+	reduceDone  bool
 }
 
-func (c *Coordinator) mapTasksDone() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	for _, mt := range c.MapTasks {
-		if mt.Status != StatusCompleted {
-			return false
+func (c *Coordinator) setTaskTimeout(task *TaskRecord, d time.Duration) {
+	select {
+	case <-time.After(d):
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if task.Status != StatusCompleted {
+			task.Status = StatusIdle
+			return
 		}
 	}
-	return true
-}
-
-func (c *Coordinator) reduceTasksDone() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	for _, mt := range c.ReduceTasks {
-		if mt.Status != StatusCompleted {
-			return false
-		}
-	}
-	return true
 }
 
 func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.mapDone {
+		for id, mt := range c.MapTasks {
+			if mt.Status == StatusIdle {
+				reply.Task = Task{
+					TaskID:   id,
+					TaskType: TaskTypeMap,
+					MapTask: &MapTask{
+						FileName:         mt.Task.MapTask.FileName,
+						PartitionsAmount: mt.Task.MapTask.PartitionsAmount,
+					},
+				}
+				mt.Status = StatusInProcess
+
+				go c.setTaskTimeout(mt, 10*time.Second)
+				return nil
+			}
+		}
+		return nil
+	}
+
+	if !c.reduceDone {
+		for id, rt := range c.ReduceTasks {
+			if rt.Status == StatusIdle {
+				reply.Task = Task{
+					TaskID:   id,
+					TaskType: TaskTypeReduce,
+					ReduceTask: &ReduceTask{
+						MapsAmount: len(c.MapTasks),
+					},
+				}
+				rt.Status = StatusInProcess
+
+				go c.setTaskTimeout(rt, 10*time.Second)
+				return nil
+			}
+		}
+		return nil
+	}
+
+	reply.TaskType = TaskTypeExit
 	return nil
 }
 
-func (c *Coordinator) TaskDone(args *GetTaskArg, reply *GetTaskReply) error {
+func (c *Coordinator) TaskDone(args *DoneTaskArg, reply *DoneTaskReply) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	switch args.TaskType {
+	case TaskTypeMap:
+		c.MapTasks[args.TaskID].Status = StatusCompleted
+
+		c.mapDone = true
+		for _, mt := range c.MapTasks {
+			if mt.Status != StatusCompleted {
+				c.mapDone = false
+				break
+			}
+		}
+
+	case TaskTypeReduce:
+		c.ReduceTasks[args.TaskID].Status = StatusCompleted
+
+		c.reduceDone = true
+		for _, mt := range c.ReduceTasks {
+			if mt.Status != StatusCompleted {
+				c.reduceDone = false
+				break
+			}
+		}
+	}
 	return nil
 }
 
@@ -79,11 +140,11 @@ func (c *Coordinator) server() {
 // mrcoordinator/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
-	ret := false
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	// TODO
-
-	return ret
+	resp := c.reduceDone
+	return resp
 }
 
 // create a Coordinator.
@@ -92,10 +153,9 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := new(Coordinator)
 
-	// TODO
-	mapTasks := make(map[int]TaskRecord, len(files))
+	mapTasks := make([]*TaskRecord, len(files))
 	for i, filename := range files {
-		mapTasks[i] = TaskRecord{
+		mapTasks[i] = &TaskRecord{
 			Task: &Task{
 				MapTask: &MapTask{
 					FileName:         filename,
@@ -110,9 +170,9 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	}
 	c.MapTasks = mapTasks
 
-	reduceTasks := make(map[int]TaskRecord, nReduce)
+	reduceTasks := make([]*TaskRecord, nReduce)
 	for i := range nReduce {
-		mapTasks[i] = TaskRecord{
+		reduceTasks[i] = &TaskRecord{
 			Task: &Task{
 				ReduceTask: &ReduceTask{
 					MapsAmount: len(files),
@@ -127,6 +187,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.ReduceTasks = reduceTasks
 
 	c.server()
+	fmt.Println("Coordinator started...")
 	return c
 }
 

@@ -7,7 +7,6 @@ import (
 	"net/rpc"
 	"os"
 	"sort"
-	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -30,12 +29,11 @@ func Worker(
 	reducef func(string, []string) string) {
 
 	for {
-		arg := GetTaskArg{}
+		arg := new(GetTaskArg)
 		reply := new(GetTaskReply)
-		ok := call("Coordinator.GetTask", arg, &reply)
-		if !ok {
-			time.Sleep(500 * time.Millisecond)
-			continue
+		if ok := call("Coordinator.GetTask", arg, reply); !ok {
+			fmt.Println("Worker shutting down...")
+			return
 		}
 
 		switch reply.TaskType {
@@ -47,38 +45,34 @@ func Worker(
 
 			kva := mapf(reply.MapTask.FileName, string(contents))
 
-			buckets := make([][]KeyValue, reply.MapTask.PartitionsAmount)
+			partitions := make([][]KeyValue, reply.MapTask.PartitionsAmount)
 			for _, kv := range kva {
 				i := ihash(kv.Key) % reply.MapTask.PartitionsAmount
-				buckets[i] = append(buckets[i], kv)
+				partitions[i] = append(partitions[i], kv)
 			}
 
-			for i, bucket := range buckets {
-				intmdFileName := fmt.Sprintf("mr-%d-%d", reply.MapTask.PartitionsAmount, i)
-				if err := MarshalKeyValues(intmdFileName, bucket); err != nil {
+			for i, partition := range partitions {
+				intmdFileName := fmt.Sprintf("mr-%d-%d", reply.TaskID, i)
+				if err := MarshalKeyValues(intmdFileName, partition); err != nil {
 					log.Fatalf("Marshaling: %v", err)
 				}
 			}
 
 			doneArg := DoneTaskArg{TaskID: reply.TaskID, TaskType: TaskTypeMap}
 			doneReply := new(DoneTaskReply)
-			ok := call("Coordnator.TaskDone", doneArg, doneReply)
-			if !ok {
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
+			call("Coordinator.TaskDone", &doneArg, doneReply)
 
 		case TaskTypeReduce:
-			buckets, err := UnmarshalKeyValues(reply.TaskID, reply.ReduceTask.MapsAmount)
+			partitions, err := UnmarshalKeyValues(reply.TaskID, reply.ReduceTask.MapsAmount)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			sort.Slice(buckets, func(i, j int) bool {
-				return buckets[i].Key < buckets[j].Key
+			sort.Slice(partitions, func(i, j int) bool {
+				return partitions[i].Key < partitions[j].Key
 			})
 
-			outFileName := fmt.Sprintf("mr-out-%d", reply.ReduceTask.MapsAmount)
+			outFileName := fmt.Sprintf("mr-out-%d", reply.TaskID)
 			ofile, err := os.Create(outFileName)
 			if err != nil {
 				log.Fatal(err)
@@ -89,18 +83,18 @@ func Worker(
 			}()
 
 			i := 0
-			for i < len(buckets) {
+			for i < len(partitions) {
 				j := i + 1
-				for j < len(buckets) && buckets[j].Key == buckets[i].Key {
+				for j < len(partitions) && partitions[j].Key == partitions[i].Key {
 					j++
 				}
 				values := []string{}
 				for k := i; k < j; k++ {
-					values = append(values, buckets[k].Value)
+					values = append(values, partitions[k].Value)
 				}
-				output := reducef(buckets[i].Key, values)
+				output := reducef(partitions[i].Key, values)
 
-				fmt.Fprintf(ofile, "%v %v\n", buckets[i].Key, output)
+				fmt.Fprintf(ofile, "%v %v\n", partitions[i].Key, output)
 
 				i = j
 			}
@@ -110,15 +104,13 @@ func Worker(
 				TaskID:   reply.TaskID,
 			}
 			doneReply := new(DoneTaskReply)
-			ok := call("Coordinator.TaskDone", doneArgs, doneReply)
-			if !ok {
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
+			call("Coordinator.TaskDone", &doneArgs, doneReply)
+
+		case TaskTypeExit:
+			fmt.Println("Worker shutting down...")
+			return
 		}
 	}
-
-	// CallExample()
 }
 
 // example function to show how to make an RPC call to the coordinator.

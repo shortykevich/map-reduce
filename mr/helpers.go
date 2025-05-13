@@ -37,7 +37,7 @@ func MarshalKeyValues(fname string, kva []KeyValue) error {
 		return fmt.Errorf("Renaming: %w", err)
 	}
 
-	return nil
+	return err
 }
 
 func UnmarshalKeyValues(partition int, mapTasksAmount int) ([]KeyValue, error) {

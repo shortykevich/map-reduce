@@ -9,13 +9,14 @@ build/plugin:
 
 build/mrcoordinator:
 	@rm -f coord
-	@go build -o coord ./mrcoordinator/mrcoordinator.go
+	@go build -race -o coord ./mrcoordinator/mrcoordinator.go
 
 build/mrworker:
 	@rm -f worker
-	@go build -o worker ./mrworker/mrworker.go
+	@go build -race -o worker ./mrworker/mrworker.go
 
-build/mr: build/plugin build/mrcoordinator build/mrworker
+# build/plugin
+build/mr: build/mrcoordinator build/mrworker
 
 run/seq: | clean-out
 	@go run ./mrsequential.go wc.so pg*.txt
@@ -24,4 +25,4 @@ run/mrcoordinator:
 	@./coord pg-*.txt
 
 run/mrworker:
-	@./worker wc.so
+	@./worker
