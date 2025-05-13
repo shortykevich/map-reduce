@@ -35,9 +35,9 @@ func Worker(
 		}
 		switch reply.TaskType {
 		case TaskTypeMap:
-			go processMapTask(mapf, reply)
+			processMapTask(mapf, reply)
 		case TaskTypeReduce:
-			go processReduceTask(reducef, reply)
+			processReduceTask(reducef, reply)
 		}
 	}
 }

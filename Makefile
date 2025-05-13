@@ -11,7 +11,7 @@ clean/plugins:
 
 build/plugins: | clean/plugins
 	@for plugin in ${PLUGINS}; do \
-	go build -o ${PDIR} -buildmode=plugin $(PDIR)/$$plugin; \
+	go build -race -o ${PDIR} -buildmode=plugin $(PDIR)/$$plugin; \
 	done
 
 build/seq: | clean/out

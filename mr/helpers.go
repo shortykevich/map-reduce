@@ -55,7 +55,9 @@ func processReduceTask(reducef func(string, []string) string, reply *GetTaskRepl
 	}
 
 	defer func() {
-		log.Print(ofile.Close())
+		if closeErr := ofile.Close(); closeErr != nil {
+			log.Print(closeErr)
+		}
 	}()
 
 	i := 0
