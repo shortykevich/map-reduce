@@ -1,4 +1,10 @@
-package mrapps
+package main
+
+//
+// a word-count application "plugin" for MapReduce.
+//
+// go build -buildmode=plugin wc.go
+//
 
 import (
 	"strconv"
@@ -8,6 +14,11 @@ import (
 	"github.com/shortykevich/map-reduce/mr"
 )
 
+// The map function is called once for each file of input. The first
+// argument is the name of the input file, and the second is the
+// file's complete contents. You should ignore the input file name,
+// and look only at the contents argument. The return value is a slice
+// of key/value pairs.
 func Map(filename string, contents string) []mr.KeyValue {
 	// function to detect word separators.
 	ff := func(r rune) bool { return !unicode.IsLetter(r) }
@@ -17,10 +28,7 @@ func Map(filename string, contents string) []mr.KeyValue {
 
 	kva := []mr.KeyValue{}
 	for _, w := range words {
-		kv := mr.KeyValue{
-			Key:   w,
-			Value: "1",
-		}
+		kv := mr.KeyValue{Key: w, Value: "1"}
 		kva = append(kva, kv)
 	}
 	return kva

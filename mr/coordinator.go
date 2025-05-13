@@ -73,7 +73,7 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 				return nil
 			}
 		}
-		// All map tasks been asigned but still
+		// All map tasks been asigned but not completed
 		return nil
 	}
 
@@ -205,7 +205,3 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	fmt.Println("Coordinator started...")
 	return c
 }
-
-// func initMapTasks() map[int]GetTaskReply {
-
-// }

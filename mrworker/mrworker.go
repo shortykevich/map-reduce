@@ -1,22 +1,22 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
 	"plugin"
 
 	"github.com/shortykevich/map-reduce/mr"
-	"github.com/shortykevich/map-reduce/mrapps"
 )
 
 func main() {
-	// if len(os.Args) != 2 {
-	// 	fmt.Fprintf(os.Stderr, "Usage: mrworker xxx.so\n")
-	// 	os.Exit(1)
-	// }
+	if len(os.Args) != 2 {
+		fmt.Fprintf(os.Stderr, "Usage: mrworker xxx.so\n")
+		os.Exit(1)
+	}
 
-	// mapf, reducef := loadPlugin(os.Args[1])
+	mapf, reducef := loadPlugin(os.Args[1])
 
-	mapf, reducef := mrapps.Map, mrapps.Reduce
 	mr.Worker(mapf, reducef)
 }
 

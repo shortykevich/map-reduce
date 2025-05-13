@@ -1,13 +1,20 @@
-.PHONY: clean-out build/plugin run/seq run/mrcoordinator run/mrworker build/mrcoordinator build/mrworker build/mr
+.PHONY: clean/out clean/plugins build/plugin run/seq run/mrcoordinator run/mrworker build/mrcoordinator build/mrworker build/mr
 
-clean-out:
+PDIR := "./mrapps"
+PLUGINS := crash.go early_exit.go indexer.go jobcount.go mtiming.go nocrash.go rtiming.go wc.go
+
+clean/out:
 	@rm -f mr-out*
 
-build/plugin:
-	@rm -f wc.so
-	@go build -o wc.so -buildmode=plugin ./mrapps/wc.go
+clean/plugins:
+	@rm -f ./mrapps/*.so
 
-build/seq: | clean-out
+build/plugins: | clean/plugins
+	@for plugin in ${PLUGINS}; do \
+	go build -o ${PDIR} -buildmode=plugin $(PDIR)/$$plugin; \
+	done
+
+build/seq: | clean/out
 	@go build mrsequential.go
 
 build/mrcoordinator:
@@ -18,10 +25,9 @@ build/mrworker:
 	@rm -f worker
 	@go build -race -o worker ./mrworker/mrworker.go
 
-# build/plugin
-build/mr: build/mrcoordinator build/mrworker
+build/mr: build/plugins build/mrcoordinator build/mrworker
 
-run/seq: | clean-out
+run/seq: | clean/out
 	@./mrsequential wc.so pg*.txt
 
 run/mrcoordinator:
