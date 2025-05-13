@@ -7,6 +7,9 @@ build/plugin:
 	@rm -f wc.so
 	@go build -o wc.so -buildmode=plugin ./mrapps/wc.go
 
+build/seq: | clean-out
+	@go build mrsequential.go
+
 build/mrcoordinator:
 	@rm -f coord
 	@go build -race -o coord ./mrcoordinator/mrcoordinator.go
@@ -19,7 +22,7 @@ build/mrworker:
 build/mr: build/mrcoordinator build/mrworker
 
 run/seq: | clean-out
-	@go run ./mrsequential.go wc.so pg*.txt
+	@./mrsequential wc.so pg*.txt
 
 run/mrcoordinator:
 	@./coord pg-*.txt

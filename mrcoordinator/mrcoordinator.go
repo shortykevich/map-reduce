@@ -19,6 +19,9 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
+	fmt.Println("Running clean up...")
+	m.CleanUp()
+
 	fmt.Println("Coordinator shutting down...")
 	time.Sleep(time.Second)
 }

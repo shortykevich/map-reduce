@@ -26,6 +26,20 @@ type Coordinator struct {
 	reduceDone  bool
 }
 
+func (c *Coordinator) CleanUp() {
+	maps := len(c.MapTasks)
+	reduces := len(c.ReduceTasks)
+
+	for i := range maps {
+		for j := range reduces {
+			fname := fmt.Sprintf("mr-%d-%d", i, j)
+			if err := os.Remove(fname); err != nil {
+				log.Fatal(err)
+			}
+		}
+	}
+}
+
 func (c *Coordinator) setTaskTimeout(task *TaskRecord, d time.Duration) {
 	select {
 	case <-time.After(d):
@@ -59,6 +73,7 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 				return nil
 			}
 		}
+		// All map tasks been asigned but still
 		return nil
 	}
 
@@ -81,7 +96,7 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 		return nil
 	}
 
-	reply.TaskType = TaskTypeExit
+	// reply.TaskType = TaskTypeExit
 	return nil
 }
 
@@ -105,8 +120,8 @@ func (c *Coordinator) TaskDone(args *DoneTaskArg, reply *DoneTaskReply) error {
 		c.ReduceTasks[args.TaskID].Status = StatusCompleted
 
 		c.reduceDone = true
-		for _, mt := range c.ReduceTasks {
-			if mt.Status != StatusCompleted {
+		for _, rt := range c.ReduceTasks {
+			if rt.Status != StatusCompleted {
 				c.reduceDone = false
 				break
 			}

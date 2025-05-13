@@ -5,8 +5,6 @@ import (
 	"hash/fnv"
 	"log"
 	"net/rpc"
-	"os"
-	"sort"
 )
 
 // Map functions return a slice of KeyValue.
@@ -35,80 +33,11 @@ func Worker(
 			fmt.Println("Worker shutting down...")
 			return
 		}
-
 		switch reply.TaskType {
 		case TaskTypeMap:
-			contents, err := os.ReadFile(reply.MapTask.FileName)
-			if err != nil {
-				log.Fatalf("Opening file: %v", err)
-			}
-
-			kva := mapf(reply.MapTask.FileName, string(contents))
-
-			partitions := make([][]KeyValue, reply.MapTask.PartitionsAmount)
-			for _, kv := range kva {
-				i := ihash(kv.Key) % reply.MapTask.PartitionsAmount
-				partitions[i] = append(partitions[i], kv)
-			}
-
-			for i, partition := range partitions {
-				intmdFileName := fmt.Sprintf("mr-%d-%d", reply.TaskID, i)
-				if err := MarshalKeyValues(intmdFileName, partition); err != nil {
-					log.Fatalf("Marshaling: %v", err)
-				}
-			}
-
-			doneArg := DoneTaskArg{TaskID: reply.TaskID, TaskType: TaskTypeMap}
-			doneReply := new(DoneTaskReply)
-			call("Coordinator.TaskDone", &doneArg, doneReply)
-
+			go processMapTask(mapf, reply)
 		case TaskTypeReduce:
-			partitions, err := UnmarshalKeyValues(reply.TaskID, reply.ReduceTask.MapsAmount)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			sort.Slice(partitions, func(i, j int) bool {
-				return partitions[i].Key < partitions[j].Key
-			})
-
-			outFileName := fmt.Sprintf("mr-out-%d", reply.TaskID)
-			ofile, err := os.Create(outFileName)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			defer func() {
-				log.Fatal(ofile.Close())
-			}()
-
-			i := 0
-			for i < len(partitions) {
-				j := i + 1
-				for j < len(partitions) && partitions[j].Key == partitions[i].Key {
-					j++
-				}
-				values := []string{}
-				for k := i; k < j; k++ {
-					values = append(values, partitions[k].Value)
-				}
-				output := reducef(partitions[i].Key, values)
-
-				fmt.Fprintf(ofile, "%v %v\n", partitions[i].Key, output)
-
-				i = j
-			}
-
-			doneArgs := DoneTaskArg{
-				TaskType: TaskTypeReduce,
-				TaskID:   reply.TaskID,
-			}
-			doneReply := new(DoneTaskReply)
-			call("Coordinator.TaskDone", &doneArgs, doneReply)
-
-		case TaskTypeExit:
-			fmt.Println("Worker shutting down...")
-			return
+			go processReduceTask(reducef, reply)
 		}
 	}
 }
