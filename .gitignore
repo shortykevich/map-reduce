@@ -25,6 +25,6 @@ go.work.sum
 .env
 
 mr-*
-#mrworker
-#mrcoordinator
-#mrsequential
+mrworker
+mrcoordinator
+mrsequential
