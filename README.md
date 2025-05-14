@@ -11,7 +11,6 @@ This repository contains a simple MapReduce framework along with example coordin
   - [Tests](#tests)
   - [Clean](#clean)
 - [Example Usage](#example-usage)
-- [Plugins (Applications)](#plugins-applications)
 
 ---
 

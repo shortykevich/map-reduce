@@ -5,6 +5,8 @@ import (
 	"hash/fnv"
 	"log"
 	"net/rpc"
+	"os"
+	"sort"
 )
 
 // Map functions return a slice of KeyValue.
@@ -40,6 +42,84 @@ func Worker(
 			processReduceTask(reducef, reply)
 		}
 	}
+}
+
+func processMapTask(mapf func(string, string) []KeyValue, reply *GetTaskReply) {
+	contents, err := os.ReadFile(reply.MapTask.FileName)
+	if err != nil {
+		log.Printf("Opening file: %v", err)
+		return
+	}
+
+	kva := mapf(reply.MapTask.FileName, string(contents))
+
+	partitions := make([][]KeyValue, reply.MapTask.PartitionsAmount)
+	for _, kv := range kva {
+		i := ihash(kv.Key) % reply.MapTask.PartitionsAmount
+		partitions[i] = append(partitions[i], kv)
+	}
+
+	for i, partition := range partitions {
+		intmdFileName := fmt.Sprintf("mr-%d-%d", reply.TaskID, i)
+		if err := MarshalKeyValues(intmdFileName, partition); err != nil {
+			log.Printf("Marshaling: %v", err)
+			return
+		}
+	}
+
+	responseTaskDone(TaskTypeMap, reply)
+}
+
+func processReduceTask(reducef func(string, []string) string, reply *GetTaskReply) {
+	partitions, err := UnmarshalKeyValues(reply.TaskID, reply.ReduceTask.MapsAmount)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	sort.Slice(partitions, func(i, j int) bool {
+		return partitions[i].Key < partitions[j].Key
+	})
+
+	outFileName := fmt.Sprintf("mr-out-%d", reply.TaskID)
+	ofile, err := os.Create(outFileName)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	defer func() {
+		if closeErr := ofile.Close(); closeErr != nil {
+			log.Print(closeErr)
+		}
+	}()
+
+	i := 0
+	for i < len(partitions) {
+		j := i + 1
+		for j < len(partitions) && partitions[j].Key == partitions[i].Key {
+			j++
+		}
+		values := []string{}
+		for k := i; k < j; k++ {
+			values = append(values, partitions[k].Value)
+		}
+		output := reducef(partitions[i].Key, values)
+
+		fmt.Fprintf(ofile, "%v %v\n", partitions[i].Key, output)
+
+		i = j
+	}
+
+	responseTaskDone(TaskTypeReduce, reply)
+}
+
+func responseTaskDone(tasktype TaskType, reply *GetTaskReply) {
+	doneReply, doneArg := new(DoneTaskReply), DoneTaskArg{
+		TaskID:   reply.TaskID,
+		TaskType: tasktype,
+	}
+	call("Coordinator.TaskDone", &doneArg, doneReply)
 }
 
 // example function to show how to make an RPC call to the coordinator.
