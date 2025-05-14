@@ -26,6 +26,7 @@ const (
 	TaskTypeUnknown TaskType = iota
 	TaskTypeMap
 	TaskTypeReduce
+	TaskTypeWait
 	TaskTypeExit
 )
 
@@ -58,7 +59,9 @@ type ReduceTask struct {
 	MapsAmount int
 }
 
-type GetTaskArg struct{}
+type GetTaskArg struct {
+	WorkerID uint64
+}
 
 type GetTaskReply struct {
 	Task
@@ -66,6 +69,7 @@ type GetTaskReply struct {
 
 type DoneTaskArg struct {
 	TaskID   int
+	WorkerID uint64
 	TaskType TaskType
 }
 type DoneTaskReply struct{}

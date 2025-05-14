@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log"
+	"math/rand/v2"
 	"net/rpc"
 	"os"
 	"sort"
+	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -28,20 +30,31 @@ func Worker(
 	mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
+	workerID := generateWorkerID()
+	log.Printf("Worker %v starting...\n", workerID)
 	for {
-		arg := new(GetTaskArg)
-		reply := new(GetTaskReply)
-		if ok := call("Coordinator.GetTask", arg, reply); !ok {
-			fmt.Println("Worker shutting down...")
-			return
-		}
+		arg, reply := &GetTaskArg{WorkerID: workerID}, new(GetTaskReply)
+		call("Coordinator.GetTask", arg, reply)
+
 		switch reply.TaskType {
 		case TaskTypeMap:
 			processMapTask(mapf, reply)
+			responseTaskDone(workerID, TaskTypeMap, reply)
 		case TaskTypeReduce:
 			processReduceTask(reducef, reply)
+			responseTaskDone(workerID, TaskTypeReduce, reply)
+		case TaskTypeWait:
+			time.Sleep(500 * time.Millisecond)
+		case TaskTypeExit:
+			responseTaskDone(workerID, TaskTypeExit, reply)
+			log.Printf("Worker %v shutting down...\n", workerID)
+			return
 		}
 	}
+}
+
+func generateWorkerID() uint64 {
+	return (uint64(time.Now().UnixNano()) << 12) | uint64(rand.IntN(4096))
 }
 
 func processMapTask(mapf func(string, string) []KeyValue, reply *GetTaskReply) {
@@ -66,8 +79,6 @@ func processMapTask(mapf func(string, string) []KeyValue, reply *GetTaskReply) {
 			return
 		}
 	}
-
-	responseTaskDone(TaskTypeMap, reply)
 }
 
 func processReduceTask(reducef func(string, []string) string, reply *GetTaskReply) {
@@ -110,13 +121,12 @@ func processReduceTask(reducef func(string, []string) string, reply *GetTaskRepl
 
 		i = j
 	}
-
-	responseTaskDone(TaskTypeReduce, reply)
 }
 
-func responseTaskDone(tasktype TaskType, reply *GetTaskReply) {
+func responseTaskDone(workerID uint64, tasktype TaskType, reply *GetTaskReply) {
 	doneReply, doneArg := new(DoneTaskReply), DoneTaskArg{
 		TaskID:   reply.TaskID,
+		WorkerID: workerID,
 		TaskType: tasktype,
 	}
 	call("Coordinator.TaskDone", &doneArg, doneReply)

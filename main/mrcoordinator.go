@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -19,9 +20,9 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
-	fmt.Println("Running clean up...")
+	log.Println("Running clean up...")
 	m.CleanUp()
 
-	fmt.Println("Coordinator shutting down...")
+	log.Println("Coordinator shutting down...")
 	time.Sleep(time.Second)
 }

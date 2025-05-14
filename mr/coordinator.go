@@ -17,13 +17,19 @@ type TaskRecord struct {
 }
 
 type Coordinator struct {
-	// Your definitions here.
-	mu          sync.Mutex
-	JobDone     bool
-	MapTasks    []*TaskRecord
-	ReduceTasks []*TaskRecord
-	mapDone     bool
-	reduceDone  bool
+	mu            sync.Mutex
+	JobDone       bool
+	activeWorkers map[uint64]struct{}
+	MapTasks      []*TaskRecord
+	ReduceTasks   []*TaskRecord
+	mapDone       bool
+	reduceDone    bool
+}
+
+func (c *Coordinator) registerWorker(workerID uint64) {
+	if _, exists := c.activeWorkers[workerID]; !exists {
+		c.activeWorkers[workerID] = struct{}{}
+	}
 }
 
 func (c *Coordinator) CleanUp() {
@@ -56,6 +62,8 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.registerWorker(args.WorkerID)
+
 	if !c.mapDone {
 		for id, mt := range c.MapTasks {
 			if mt.Status == StatusIdle {
@@ -74,6 +82,7 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 			}
 		}
 		// All map tasks been asigned but not completed
+		reply.Task = Task{TaskType: TaskTypeWait}
 		return nil
 	}
 
@@ -93,10 +102,11 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 				return nil
 			}
 		}
+		reply.Task = Task{TaskType: TaskTypeWait}
 		return nil
 	}
 
-	// reply.TaskType = TaskTypeExit
+	reply.Task = Task{TaskType: TaskTypeExit}
 	return nil
 }
 
@@ -125,6 +135,12 @@ func (c *Coordinator) TaskDone(args *DoneTaskArg, reply *DoneTaskReply) error {
 				c.reduceDone = false
 				break
 			}
+		}
+
+	case TaskTypeExit:
+		delete(c.activeWorkers, args.WorkerID)
+		if len(c.activeWorkers) == 0 {
+			c.JobDone = true
 		}
 	}
 	return nil
@@ -158,7 +174,7 @@ func (c *Coordinator) Done() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	resp := c.reduceDone
+	resp := c.JobDone
 	return resp
 }
 
@@ -167,6 +183,7 @@ func (c *Coordinator) Done() bool {
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := new(Coordinator)
+	c.activeWorkers = make(map[uint64]struct{})
 
 	mapTasks := make([]*TaskRecord, len(files))
 	for i, filename := range files {
@@ -202,6 +219,6 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.ReduceTasks = reduceTasks
 
 	c.server()
-	fmt.Println("Coordinator started...")
+	log.Println("Coordinator starting...")
 	return c
 }
