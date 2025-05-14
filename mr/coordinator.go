@@ -16,28 +16,26 @@ type TaskRecord struct {
 	Status TaskStatus
 }
 
-type Coordinator struct {
-	mu            sync.Mutex
-	JobDone       bool
-	activeWorkers map[uint64]struct{}
-	MapTasks      []*TaskRecord
-	ReduceTasks   []*TaskRecord
-	mapDone       bool
-	reduceDone    bool
+type WorkerTracker struct {
+	lastActive time.Time
+	cancelChan chan struct{}
 }
 
-func (c *Coordinator) registerWorker(workerID uint64) {
-	if _, exists := c.activeWorkers[workerID]; !exists {
-		c.activeWorkers[workerID] = struct{}{}
-	}
+type Coordinator struct {
+	mu                   sync.Mutex
+	jobDone              bool
+	ActiveWorkers        map[uint64]*WorkerTracker
+	workerDone           chan uint64
+	refreshWorkerTimeout chan struct{}
+	MapTasks             []*TaskRecord
+	ReduceTasks          []*TaskRecord
+	mapDone              bool
+	reduceDone           bool
 }
 
 func (c *Coordinator) CleanUp() {
-	maps := len(c.MapTasks)
-	reduces := len(c.ReduceTasks)
-
-	for i := range maps {
-		for j := range reduces {
+	for i := range c.MapTasks {
+		for j := range c.ReduceTasks {
 			fname := fmt.Sprintf("mr-%d-%d", i, j)
 			if err := os.Remove(fname); err != nil {
 				log.Fatal(err)
@@ -46,9 +44,43 @@ func (c *Coordinator) CleanUp() {
 	}
 }
 
-func (c *Coordinator) setTaskTimeout(task *TaskRecord, d time.Duration) {
+func (c *Coordinator) registerWorker(workerID uint64, timeout time.Duration) {
+	if tracker, exists := c.ActiveWorkers[workerID]; exists {
+		close(tracker.cancelChan)
+		tracker.cancelChan = make(chan struct{})
+		tracker.lastActive = time.Now()
+		go c.setWorkerTimeout(workerID, timeout, tracker.cancelChan)
+		return
+	}
+
+	tracker := &WorkerTracker{
+		lastActive: time.Now(),
+		cancelChan: make(chan struct{}),
+	}
+	c.ActiveWorkers[workerID] = tracker
+	go c.setWorkerTimeout(workerID, timeout, tracker.cancelChan)
+}
+
+func (c *Coordinator) setWorkerTimeout(workerID uint64, timeout time.Duration, trackerCancel <-chan struct{}) {
 	select {
-	case <-time.After(d):
+	case <-time.After(timeout):
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		log.Printf("Worker %v doesn't respond. Deleting from active workers...", workerID)
+		delete(c.ActiveWorkers, workerID)
+	case doneWorkerID := <-c.workerDone:
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if doneWorkerID == workerID {
+			delete(c.ActiveWorkers, doneWorkerID)
+		}
+	case <-trackerCancel:
+	}
+}
+
+func (c *Coordinator) setTaskTimeout(task *TaskRecord, duration time.Duration) {
+	select {
+	case <-time.After(duration):
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if task.Status != StatusCompleted {
@@ -62,7 +94,7 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.registerWorker(args.WorkerID)
+	c.registerWorker(args.WorkerID, 10*time.Second)
 
 	if !c.mapDone {
 		for id, mt := range c.MapTasks {
@@ -138,9 +170,9 @@ func (c *Coordinator) TaskDone(args *DoneTaskArg, reply *DoneTaskReply) error {
 		}
 
 	case TaskTypeExit:
-		delete(c.activeWorkers, args.WorkerID)
-		if len(c.activeWorkers) == 0 {
-			c.JobDone = true
+		c.workerDone <- args.WorkerID
+		if len(c.ActiveWorkers) == 0 {
+			c.jobDone = true
 		}
 	}
 	return nil
@@ -174,8 +206,7 @@ func (c *Coordinator) Done() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	resp := c.JobDone
-	return resp
+	return c.mapDone && c.reduceDone
 }
 
 // create a Coordinator.
@@ -183,7 +214,9 @@ func (c *Coordinator) Done() bool {
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := new(Coordinator)
-	c.activeWorkers = make(map[uint64]struct{})
+	c.ActiveWorkers = make(map[uint64]*WorkerTracker, nReduce)
+	c.workerDone = make(chan uint64)
+	c.refreshWorkerTimeout = make(chan struct{})
 
 	mapTasks := make([]*TaskRecord, len(files))
 	for i, filename := range files {
