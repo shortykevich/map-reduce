@@ -17,23 +17,22 @@ type TaskRecord struct {
 }
 
 type WorkerTracker struct {
-	lastActive time.Time
+	doneChan   chan struct{}
 	cancelChan chan struct{}
 }
 
 type Coordinator struct {
-	mu                   sync.Mutex
-	jobDone              bool
-	ActiveWorkers        map[uint64]*WorkerTracker
-	workerDone           chan uint64
-	refreshWorkerTimeout chan struct{}
-	MapTasks             []*TaskRecord
-	ReduceTasks          []*TaskRecord
-	mapDone              bool
-	reduceDone           bool
+	mu            sync.Mutex
+	wg            sync.WaitGroup
+	ActiveWorkers map[uint64]*WorkerTracker
+	MapTasks      []*TaskRecord
+	ReduceTasks   []*TaskRecord
+	mapDone       bool
+	reduceDone    bool
 }
 
-func (c *Coordinator) CleanUp() {
+func (c *Coordinator) Shutdown() {
+	c.wg.Wait()
 	for i := range c.MapTasks {
 		for j := range c.ReduceTasks {
 			fname := fmt.Sprintf("mr-%d-%d", i, j)
@@ -44,37 +43,35 @@ func (c *Coordinator) CleanUp() {
 	}
 }
 
-func (c *Coordinator) registerWorker(workerID uint64, timeout time.Duration) {
-	if tracker, exists := c.ActiveWorkers[workerID]; exists {
-		close(tracker.cancelChan)
-		tracker.cancelChan = make(chan struct{})
-		tracker.lastActive = time.Now()
-		go c.setWorkerTimeout(workerID, timeout, tracker.cancelChan)
-		return
+func (c *Coordinator) addWorkerWithTimeout(workerID uint64, timeout time.Duration) {
+	oldTracker, exists := c.ActiveWorkers[workerID]
+	if exists {
+		close(oldTracker.cancelChan)
 	}
 
-	tracker := &WorkerTracker{
-		lastActive: time.Now(),
+	newTracker := &WorkerTracker{
 		cancelChan: make(chan struct{}),
+		doneChan:   make(chan struct{}, 1),
 	}
-	c.ActiveWorkers[workerID] = tracker
-	go c.setWorkerTimeout(workerID, timeout, tracker.cancelChan)
+	c.ActiveWorkers[workerID] = newTracker
+	c.wg.Add(1)
+	go c.trackWorker(workerID, timeout, newTracker)
 }
 
-func (c *Coordinator) setWorkerTimeout(workerID uint64, timeout time.Duration, trackerCancel <-chan struct{}) {
+func (c *Coordinator) trackWorker(workerID uint64, duration time.Duration, tracker *WorkerTracker) {
+	defer c.wg.Done()
+
 	select {
-	case <-time.After(timeout):
+	case <-time.After(duration):
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		log.Printf("Worker %v doesn't respond. Deleting from active workers...", workerID)
 		delete(c.ActiveWorkers, workerID)
-	case doneWorkerID := <-c.workerDone:
+	case <-tracker.doneChan:
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		if doneWorkerID == workerID {
-			delete(c.ActiveWorkers, doneWorkerID)
-		}
-	case <-trackerCancel:
+		delete(c.ActiveWorkers, workerID)
+	case <-tracker.cancelChan:
 	}
 }
 
@@ -94,7 +91,7 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.registerWorker(args.WorkerID, 10*time.Second)
+	c.addWorkerWithTimeout(args.WorkerID, 10*time.Second)
 
 	if !c.mapDone {
 		for id, mt := range c.MapTasks {
@@ -113,7 +110,6 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 				return nil
 			}
 		}
-		// All map tasks been asigned but not completed
 		reply.Task = Task{TaskType: TaskTypeWait}
 		return nil
 	}
@@ -170,9 +166,8 @@ func (c *Coordinator) TaskDone(args *DoneTaskArg, reply *DoneTaskReply) error {
 		}
 
 	case TaskTypeExit:
-		c.workerDone <- args.WorkerID
-		if len(c.ActiveWorkers) == 0 {
-			c.jobDone = true
+		if tracker, exists := c.ActiveWorkers[args.WorkerID]; exists {
+			tracker.doneChan <- struct{}{}
 		}
 	}
 	return nil
@@ -200,7 +195,7 @@ func (c *Coordinator) server() {
 	go http.Serve(l, nil)
 }
 
-// mrcoordinator/mrcoordinator.go calls Done() periodically to find out
+// main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
 	c.mu.Lock()
@@ -215,8 +210,6 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := new(Coordinator)
 	c.ActiveWorkers = make(map[uint64]*WorkerTracker, nReduce)
-	c.workerDone = make(chan uint64)
-	c.refreshWorkerTimeout = make(chan struct{})
 
 	mapTasks := make([]*TaskRecord, len(files))
 	for i, filename := range files {

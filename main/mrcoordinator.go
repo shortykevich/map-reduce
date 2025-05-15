@@ -20,6 +20,8 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
+	log.Println("Coordinator starting graceful shutdown...")
+	m.Shutdown()
+
 	log.Println("Coordinator shutting down...")
-	m.CleanUp()
 }
