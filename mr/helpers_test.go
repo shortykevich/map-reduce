@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/shortykevich/map-reduce/mr"
+	"github.com/shrtyk/map-reduce/mr"
 )
 
 func TestHelpers(t *testing.T) {

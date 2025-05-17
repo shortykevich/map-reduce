@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shortykevich/map-reduce/mr"
+	"github.com/shrtyk/map-reduce/mr"
 )
 
 func maybeCrash() {

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shortykevich/map-reduce/mr"
+	"github.com/shrtyk/map-reduce/mr"
 )
 
 var count int

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/shortykevich/map-reduce/mr"
+	"github.com/shrtyk/map-reduce/mr"
 )
 
 // The mapping function is called once for each piece of the input.

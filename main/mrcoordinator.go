@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/shortykevich/map-reduce/mr"
+	"github.com/shrtyk/map-reduce/mr"
 )
 
 func main() {

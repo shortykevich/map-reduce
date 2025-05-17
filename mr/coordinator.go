@@ -22,13 +22,14 @@ type WorkerTracker struct {
 }
 
 type Coordinator struct {
-	mu            sync.Mutex
-	wg            sync.WaitGroup
-	ActiveWorkers map[uint64]*WorkerTracker
-	MapTasks      []*TaskRecord
-	ReduceTasks   []*TaskRecord
-	mapDone       bool
-	reduceDone    bool
+	mu             sync.Mutex
+	wg             sync.WaitGroup
+	workersTimeout time.Duration
+	ActiveWorkers  map[uint64]*WorkerTracker
+	MapTasks       []*TaskRecord
+	ReduceTasks    []*TaskRecord
+	mapDone        bool
+	reduceDone     bool
 }
 
 func (c *Coordinator) Shutdown() {
@@ -43,7 +44,7 @@ func (c *Coordinator) Shutdown() {
 	}
 }
 
-func (c *Coordinator) addWorkerWithTimeout(workerID uint64, timeout time.Duration) {
+func (c *Coordinator) addWorker(workerID uint64) {
 	oldTracker, exists := c.ActiveWorkers[workerID]
 	if exists {
 		close(oldTracker.cancelChan)
@@ -55,14 +56,14 @@ func (c *Coordinator) addWorkerWithTimeout(workerID uint64, timeout time.Duratio
 	}
 	c.ActiveWorkers[workerID] = newTracker
 	c.wg.Add(1)
-	go c.trackWorker(workerID, timeout, newTracker)
+	go c.trackWorker(workerID, newTracker)
 }
 
-func (c *Coordinator) trackWorker(workerID uint64, duration time.Duration, tracker *WorkerTracker) {
+func (c *Coordinator) trackWorker(workerID uint64, tracker *WorkerTracker) {
 	defer c.wg.Done()
 
 	select {
-	case <-time.After(duration):
+	case <-time.After(c.workersTimeout):
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		log.Printf("Worker %v doesn't respond. Deleting from active workers...", workerID)
@@ -91,7 +92,7 @@ func (c *Coordinator) GetTask(args *GetTaskArg, reply *GetTaskReply) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.addWorkerWithTimeout(args.WorkerID, 10*time.Second)
+	c.addWorker(args.WorkerID)
 
 	if !c.mapDone {
 		for id, mt := range c.MapTasks {
@@ -210,6 +211,7 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := new(Coordinator)
 	c.ActiveWorkers = make(map[uint64]*WorkerTracker, nReduce)
+	c.workersTimeout = 10 * time.Second
 
 	mapTasks := make([]*TaskRecord, len(files))
 	for i, filename := range files {
